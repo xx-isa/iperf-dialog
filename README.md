@@ -2,12 +2,13 @@
 
 ## descrição
 
-trabalho de faculdade, cria um comando do iperf com base em alguns prompts do dialog. Não implementa todas as opções e algumas estão como todo. Não chama o iperf ainda nem testa se o comando é válido, mas retorna o comando na stdout.
+trabalho de faculdade, cria um comando do iperf com base em alguns prompts do dialog e chama o iPerf. Não implementa todas as opções e não checa o quanto ela são válidas.
 
 ## requisitos
 
 - dialog instalado na máquina
+- iperf 2 ou 3 instalado na máquina
 
 ## modo de uso 
 
-rode o [script](/iperf_dialog.sh) no bash e passe para o iperf.
+rode o [script](/iperf_dialog.sh) no bash.

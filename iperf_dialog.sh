@@ -1,239 +1,208 @@
 #!/bin/bash
 
-mode=""
-udp=false
-port=""
-interval=0
-host=""
-version=3
+# mode=""
+# port=""
+# interval=0
+# host=""
+# version=3
+# transmission_window=""
+# other_options=""
+# file_name=""
 transmission_time=0
-transmission_window=""
+udp=false
 reverse_transmission=false
-other_options=""
-file_name=""
 
-build_command() {
-    cmd="iperf"
+iperf_cmd() {
+    [[ $version -eq 3 ]] && echo -n "iperf3" || echo -n "iperf"
 
     case $mode in
     "cliente")
-        if $udp; then
-            cmd+=" -u"
-        fi
-
-        cmd+=" -c $host"
+        $udp && echo -n " -u"
+        echo -n " -c $host"
 
         if [[ $version -eq 3 ]]; then
-            if [[ $transmission_time -gt 0 ]];then
-                cmd+=" -t $transmission_time"
-            fi
-             
-            if $reverse_transmission; then
-                cmd+=" -R"
-            fi
+            [[ $transmission_time -gt 0 ]] && echo -n " -t $transmission_time"
+            $reverse_transmission && echo -n " -R"
         fi
         ;;
     "servidor")
-        if [[ $version -eq 2 ]] && $udp; then
-                cmd+=" -u"
-        fi
-        cmd+=" -s"
+        [[ $version -eq 2 ]] && $udp && echo -n " -u"
+        echo -n " -s"
         ;;
     esac
 
-
-    if [[ $transmission_window ]]; then
-        if [[ $mode = "cliente" ]] || [[ $version -eq 2 ]]; then
-            cmd+=" -w $transmission_window"
-        fi
-    fi
-
-    if [[ $version -eq 3 ]] && [[ $file_name ]]; then
-        cmd+=" -F $file_name"
-    fi
-
-    if [[ $port ]]; then
-        cmd+=" -p $port"
-    fi
-    if [[ $interval -gt 0 ]]; then
-        cmd+=" -i $interval"
-    fi
-
-    cmd+=" $other_options"
-
-    echo "$cmd"
+    [[ -n $transmission_window ]] && { [[ $mode = "cliente" ]] || [[ $version -eq 2 ]]; } &&
+        echo -n " -w $transmission_window"
+    [[ $version -eq 3 ]] && [[ -n $file_name ]] && echo -n " -F $file_name"
+    [[ -n $port ]] && echo -n " -p $port"
+    [[ $interval -gt 0 ]] && echo -n " -i $interval"
+    echo -n " $other_options"
 }
 
-descreve() {
-
-    msg="modo: $mode\n"
-
-    if [[ $mode = "cliente" ]]; then
-        msg+="servidor: $host\n"
-    fi
-
-    msg+="porta: $(if $port; then echo "$port"; else echo "(Padrão) 5001"; fi)\n"
-
-    msg+="intervalo entre reports: $interval segundos\n"
-
-    msg+="protocolo de transporte: $(if $udp; then echo UDP; else echo TCP; fi)\n"
-
-    msg+="inverter transmissão: $(if $reverse_transmission; then echo Sim; else echo Não; fi)\n"
-
-    msg+="tempo de transmissão: $(if [[ $transmission_time -eq 0 ]]; then echo "(Padrão) 10 segundos"; else echo "$transmission_time segundos"; fi)\n"
-
-    msg+="janela de transmissão: $transmission_window\n"
-
-    if [[ -n $file_name ]]; then
-        msg+="arquivo a ser transmitido: $file_name\n"
-    fi
-
-    msg+="argumentos extras: $other_options\n"
-
-    msg+="versão do iperf: $version\n"
-
-    echo "$msg"
+descricao() {
+    echo "modo: $mode"
+    [[ $mode = "cliente" ]] && echo "servidor: $host"
+    echo "porta: ${port:-"(Padrão) 5001"}"
+    echo "intervalo entre reports: $interval segundos"
+    echo "protocolo de transporte: $($udp && echo "UDP" || echo "TCP")"
+    echo "inverter transmissão: $($reverse_transmission && echo "Sim" || echo "Não")"
+    echo "tempo de transmissão: $([[ $transmission_time -eq 0 ]] &&
+        echo "(Padrão) 10 segundos" || echo "$transmission_time segundos")"
+    [[ $transmission_window ]] && echo "janela de transmissão: $transmission_window"
+    [[ -n $file_name ]] && echo "arquivo a ser transmitido: $file_name"
+    [[ $other_options ]] && echo "argumentos extras: $other_options"
+    echo "versão do iperf: $version"
 }
 
-init() {
-    mode=$(
-        dialog --stdout --title "Iperf" --backtitle "$(build_command)" \
+versao() {
+    dialog --stdout --title "iPerf" --menu "Escolha uma versão do iPerf" 0 0 0 \
+        2 "iPerf2 (iperf)" \
+        3 "iPerf3 (iperf3)"    
+}
+
+modo() {
+    dialog --stdout --title "Iperf" --backtitle "$(iperf_cmd)" \
         --menu "Escolha uma opção" \
         0 0 0 \
         cliente "Configuração de cliente" \
         servidor "Configuração de servidor"
-        )
 }
 
-cliente() {
-    host=$(
-        dialog --stdout --title "Cliente" --backtitle "$(build_command)" \
-            --inputbox "Digite o endereço do servidor" \
-            10 50 "$host"
-    )
+inputbox() {
+    dialog --stdout --title "$1" --backtitle "$(iperf_cmd)" \
+        --inputbox "$2" 0 0 "$3"
 }
 
-menu_geral() {
-    dialog --stdout --title "Opções" --backtitle "$(build_command)" \
-        --menu "$(build_command)" \
-        0 0 0 \
-        1 "executar comando" \
-        2 "descrever comando" \
-        3 "configurar opções"
+yesno() {
+    dialog --title "$1" --backtitle "$(iperf_cmd)" \
+        --yesno "$2" 0 0 && echo true || echo false
 }
 
 opcoes_menu() {
     # shellcheck disable=SC2046
-    eval dialog --stdout --title \"opcoes 'do' iperf\" --backtitle \"$(build_command)\" \
-        --menu \"\" 0 0 0 \
-        $(
-            if [[ $mode = "cliente" ]]; then
+    eval dialog --stdout --title \"Parâmetros\" --backtitle \"$(iperf_cmd)\" \
+        --menu \"Escolha um parâmetro para configurar\" 0 0 0 \
+        $(  if [[ $mode = "cliente" ]]; then
                 echo \
-                host \"alterar o servidor escolhido\" \
-                window \"definir o tamanho da janela\" \
-                udp \"ativar ou desativar transporte por UDP\"
+                    host \"alterar o servidor escolhido\" \
+                    window \"definir o tamanho da janela\" \
+                    udp \"ativar ou desativar transporte por UDP\"
                 if [[ $version -eq 3 ]]; then
-                echo \
-                reverse \"inverte a direcao 'do' tráfego\" \
-                time \"definir tempo de transmissao\"
+                    echo \
+                        reverse \"inverte a direcao 'do' tráfego\" \
+                        time \"definir tempo de transmissao\" \
+                        file \"definir arquivo para a transmissão\"
                 fi
             elif [[ $version -eq 2 ]]; then
                 echo \
-                udp \"ativar ou desativar transporte por UDP\" \
-                window \"definir o tamanho da janela\"
+                    udp \"ativar ou desativar transporte por UDP\" \
+                    window \"definir o tamanho da janela\"
             else
                 echo \
-                file \"definir arquivo para a transmissão\"
+                    file \"definir arquivo para a transmissão\"
             fi
         ) \
         port \"escolher porta 'do' servidor\" \
         modo \"alterar modo de funcionamento\" \
         interval \"alterar intervalo entre reports\" \
         other \"passar argumentos customizados\" \
+        version \"alterar versão 'do' iperf\" \
         voltar \"voltar para a tela anterior\"
 }
 
 opcoes_case() {
     case "$(opcoes_menu)" in
     "host")
-        cliente
+        host=$(inputbox "Cliente" "Insira o endereço do servidor" "$host")
         ;;
     "udp")
-        udp=$(
-            dialog --stdout --title "configuração de UDP" --backtitle "$(build_command)" \
-                --yesno 'transmitir via UDP?' 0 0
-            if [[ $? -eq 0 ]]; then echo true; else echo false; fi
-        )
+        udp=$(yesno "UDP" "transmitir via UDP?")
         ;;
     "reverse")
         reverse_transmission=$(
-            dialog --stdout --title "inversão de transmissão" --backtitle "$(build_command)" \
-                --yesno 'inverter a direção da transmissão?' 0 0
-            if [[ $? -eq 0 ]]; then echo true; else echo false; fi
+            yesno "inversão de transmissão" "inverter a direção da transmissão?"
         )
         ;;
     "time")
         transmission_time=$(
-            dialog --stdout --backtitle "$(build_command)" \
-                --inputbox "insira o tempo de transmissão, em segundos" \
-                0 0 
+            inputbox "Tempo de Transmissão" \
+                "Insira o tempo de transmissão, em segundos" \
+                "$transmission_time"
         )
         ;;
     "window")
-        janela
+        transmission_window=$(
+            inputbox "Janela de Transmissão" \
+                "Insira"
+        )
         ;;
     "file")
-        arquivo
+        file_name=$(
+            dialog --stdout --title "escolha um arquivo" --backtitle "$(iperf_cmd)" \
+            --fselect "." 0 80
+        )
         ;;
     "port")
         port=$(
-            dialog --stdout --backtitle "$(build_command)" \
-                --inputbox "digite o numero da porta do servidor" \
-                0 0 \
-                "$(
-                    if [[ $version -eq 3 ]]; then
-                        echo "5201"
-                    else
-                        echo "5001"
-                    fi
-                )"
+            inputbox "Porta" "Digite no numero da porta do servidor" \
+                "$([[ $version -eq 3 ]] && echo "5201" || echo "5001")"
         )
         ;;
     "modo")
-        init
+        mode=$(modo)
+        if [[ $mode = "cliente" ]]; then
+            host=$(
+                inputbox "Cliente" "Insira o endereço do servidor" "$host"
+            )
+        fi
         ;;
     "interval")
         interval=$(
-            dialog --stdout --backtitle "$(build_command)" \
-                --inputbox "digite o numero da porta do servidor" \
-                0 0 "0"
+            inputbox "Intervalo de reports" \
+                "Insira o intervalo de tempo, em segundos" \
+                "0"
         )
         ;;
     "other")
         other_options=$(
-            dialog --stdout --backtitle "$(build_command)" \
-                --inputbox "insira as opções extras a serem utilizadas" \
-                0 0 
+            inputbox "Opções Extras" \
+                "Insira as opções de linha de comando" \
+                "$other_options"
         )
         ;;
-    *)
-    ;;
+    "version")
+        version=$(versao)
+        ;;
+    *) ;;
     esac
 }
 
-init
+
+version=$(versao)
+mode=$(modo)
 if [[ $mode = "cliente" ]]; then
-    cliente
+    host=$(
+        inputbox "Cliente" "Insira o endereço do servidor" "$host"
+    )
 fi
 
 while :; do
-    case "$(menu_geral)" in
+    opt=$(
+        dialog --stdout --title "Opções" --backtitle "$(iperf_cmd)" \
+            --menu "$(iperf_cmd)" \
+            0 0 0 \
+            1 "executar comando" \
+            2 "descrever comando" \
+            3 "configurar opções"
+    )
+    case $opt in
     "1")
-        break
+        clear
+        eval "$(iperf_cmd)"
         ;;
     "2")
-        dialog --title "descrição" --backtitle "$(build_command)" --cr-wrap \
-            --msgbox "$(descreve)" 15 50
+        dialog --title "descrição" --backtitle "$(iperf_cmd)" \
+            --msgbox "$(descricao)" 0 0
         ;;
     "3")
         opcoes_case
@@ -243,6 +212,3 @@ while :; do
         ;;
     esac
 done
-
-# clear
-build_command
